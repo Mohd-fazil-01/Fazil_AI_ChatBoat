@@ -22,13 +22,22 @@ app.use(express.json());
 // API Routes
 app.use('/api', chatRoutes);
 
-// History Endpoint
-const historyFilePath = path.join(__dirname, 'chatHistory.json');
+// ── Per-session history ──────────────────────────────────────────────────────
+const historyDir = path.join(__dirname, 'sessions');
+if (!fs.existsSync(historyDir)) fs.mkdirSync(historyDir);
 
+function sessionFilePath(sessionId) {
+  // Sanitise the session ID so it can safely be used as a filename
+  const safe = (sessionId || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  return path.join(historyDir, `${safe}.json`);
+}
+
+// GET /api/history?sessionId=xxx
 app.get('/api/history', (req, res) => {
   try {
-    if (fs.existsSync(historyFilePath)) {
-      const data = fs.readFileSync(historyFilePath, 'utf8');
+    const filePath = sessionFilePath(req.query.sessionId);
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf8');
       res.json(JSON.parse(data));
     } else {
       res.json([]);
@@ -42,3 +51,5 @@ app.get('/api/history', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+export { sessionFilePath };

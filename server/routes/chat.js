@@ -7,13 +7,18 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { resumeData } from '../resumeData.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const historyFilePath = path.join(__dirname, '..', 'chatHistory.json');
+
+// sessions directory (same logic as server.js)
+const historyDir = path.join(__dirname, '..', 'sessions');
+function sessionFilePath(sessionId) {
+  const safe = (sessionId || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  return path.join(historyDir, `${safe}.json`);
+}
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -21,29 +26,32 @@ const upload = multer({ storage: multer.memoryStorage() });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const getSystemPrompt = () => {
-  return `You are an AI representing Mohd Fazil, acting as his Resume Assistant for recruiters and HR professionals.
-Your goal is to answer questions about Fazil based ONLY on the provided resume data. 
+  return `You are an AI assistant for Mohd Fazil's resume. Speak naturally and directly — never say "according to my data" or "in the resume". Just answer as if you know Fazil personally.
 
-Resume Data:
-${JSON.stringify(resumeData, null, 2)}
+About Fazil:
+- Full-Stack Developer Intern at Oriviyan Pvt. Ltd. (Nov 2025 – May 2026)
+  Built ERP platform (MERN): inventory, sales, SKU/barcode engine, Shopify webhooks, JWT/RBAC/OTP auth, Excel export, analytics dashboard.
+- Education: BCA @ ICFAI University Dehradun (2023–2026, GPA 7.79). Class XII & X from Govt. Adarsh Inter College, Afzalgarh.
+- Skills: C++, JavaScript, Python, SQL, React.js, Node.js, Express.js, MongoDB, MySQL, Tailwind CSS, REST APIs, Microservices, API Gateway, JWT, RabbitMQ, Docker (basics), Groq API/LLMs, Prompt Engineering, Pydantic, PyPDF, python-docx.
+- Projects:
+  1. AI Resume Parser & ATS Matcher — Python, Groq (Llama 3.3), Pydantic, PyPDF, python-docx
+  2. Uber Clone (Microservices) — Node.js, Express, MongoDB, RabbitMQ, API Gateway
+  3. Lost & Found Campus System — React, Node, MongoDB, Tailwind (🥈 2nd prize Technovation Hackathon)
+- Certifications: DBMS (IIT Kharagpur/NPTEL), Web Dev Bootcamp, Internship Certificate, Hackathon Prize.
+- Contact: fazilansari038@gmail.com | +91 95288 71265
 
-Rules:
-1. Answer only from the resume data. Never invent information. If something isn't in the data, say so honestly.
-2. If the user message contains or references a Job Description (JD), compare it against the resume and return:
-   - Matching skills
-   - Missing/important skills
-   - Whether the experience requirement is met
-   - An honest 0-100% match score (be strict, do not inflate)
-   - A clear final verdict on fit
-3. Always stay honest even if it's unfavorable to Fazil — never exaggerate.
-4. EXTREMELY IMPORTANT: Keep your answers VERY short and concise. Do not add fluff. Only provide the main points.
-5. Never spell out names repeatedly or print words multiple times unnecessarily.
-6. Maintain conversation context across turns.`;
+RULES:
+1. Only answer from the info above. If something isn't mentioned, say "That's not something I have info on."
+2. Be SHORT. No fluff. No repeating names. Get to the point fast.
+3. LANGUAGE: Match the HR's language exactly — English → English, Hinglish → Hinglish, Hindi → Hindi.
+4. If HR shares a JD, analyse it:
+   ✅ Matching skills | ❌ Missing skills | Experience met: yes/no | Score: X/100 (strict) | Verdict: Recommended / Partial / Not Recommended
+5. Be honest. Don't oversell. Acknowledge gaps clearly.`;
 };
 
 router.post('/chat', upload.single('file'), async (req, res) => {
   try {
-    let { message, history } = req.body;
+    let { message, history, sessionId } = req.body;
     const file = req.file;
 
     // Parse history if it comes as a string (due to FormData)
@@ -101,8 +109,8 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     res.write('data: [DONE]\n\n');
     res.end();
 
-    // Save to history
-    saveToHistory(finalMessage, fullResponse);
+    // Save to per-session history
+    saveToHistory(sessionId, finalMessage, fullResponse);
 
   } catch (error) {
     console.error("Chat Error:", error);
@@ -111,15 +119,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
   }
 });
 
-function saveToHistory(userMsg, assistantMsg) {
+function saveToHistory(sessionId, userMsg, assistantMsg) {
   try {
+    if (!fs.existsSync(historyDir)) fs.mkdirSync(historyDir);
+    const filePath = sessionFilePath(sessionId);
     let history = [];
-    if (fs.existsSync(historyFilePath)) {
-      history = JSON.parse(fs.readFileSync(historyFilePath, 'utf8'));
+    if (fs.existsSync(filePath)) {
+      history = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     }
     history.push({ role: 'user', content: userMsg });
     history.push({ role: 'assistant', content: assistantMsg });
-    fs.writeFileSync(historyFilePath, JSON.stringify(history, null, 2));
+    fs.writeFileSync(filePath, JSON.stringify(history, null, 2));
   } catch (err) {
     console.error("Failed to save history", err);
   }
