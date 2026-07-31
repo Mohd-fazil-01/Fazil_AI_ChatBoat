@@ -25,7 +25,7 @@ function App() {
 
   useEffect(() => {
     // Fetch initial history
-    fetch('http://localhost:5000/api/history')
+    fetch('https://fazil-ai-chatboat-01.onrender.com/api/history')
       .then(res => res.json())
       .then(data => {
         setMessages(data);
@@ -57,7 +57,7 @@ function App() {
         formData.append('file', file);
       }
 
-      const response = await fetch('http://localhost:5000/api/chat', {
+      const response = await fetch('https://fazil-ai-chatboat-01.onrender.com/api/chat', {
         method: 'POST',
         body: formData
       });

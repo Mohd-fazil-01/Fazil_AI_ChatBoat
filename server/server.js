@@ -14,7 +14,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://fazil-ai-chatboat.onrender.com']
+}));
 app.use(express.json());
 
 // API Routes
